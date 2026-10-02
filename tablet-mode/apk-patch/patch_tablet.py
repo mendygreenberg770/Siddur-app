@@ -97,10 +97,11 @@ methods = r'''
     invoke-static {v0}, Landroidx/preference/PreferenceManager;->getDefaultSharedPreferences(Landroid/content/Context;)Landroid/content/SharedPreferences;
     move-result-object v1
     const-string v2, "prayerOrigin"
-    const/4 v3, 0x2
+    const/4 v3, 0x1
     invoke-interface {v1, v2, v3}, Landroid/content/SharedPreferences;->getInt(Ljava/lang/String;I)I
     move-result v1
-    if-nez v1, :mktoc
+    const/4 v3, 0x2
+    if-eq v1, v3, :mktoc
     new-instance v4, Lorg/chabad/kehossiddur/HomeScreenFragment;
     invoke-direct {v4}, Lorg/chabad/kehossiddur/HomeScreenFragment;-><init>()V
     goto :mkdone
