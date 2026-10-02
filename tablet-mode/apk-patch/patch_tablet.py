@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
-# Patches PrayerFragment.smali to add: SPREAD vs OUTLINE tablet modes + a toolbar
-# toggle. All logic lives in 3 new private methods; the 3 call sites are wrapped in
-# try/catch(Throwable) so any failure falls back to normal behavior (never crashes).
-import io, sys
+# Patches the decoded app (apktool dir) to add tablet modes:
+#   - toolbar toggle: SPREAD (two columns) vs OUTLINE (side panel + reader)
+#   - OUTLINE side panel mirrors the origin: Home screen if opened from Home,
+#     Table of Contents if opened from the TOC.
+# All new logic is in self-contained methods, every call site is try/catch(Throwable)
+# wrapped, so any failure falls back to normal behavior instead of crashing.
+import io, os, sys
 
-pf = sys.argv[1]
+base = sys.argv[1]
+pf = os.path.join(base, "smali_classes6/org/chabad/kehossiddur/PrayerFragment.smali")
+ma = os.path.join(base, "smali_classes6/org/chabad/kehossiddur/MainActivity.smali")
+
+# ============================ PrayerFragment.smali ============================
 s = io.open(pf, encoding="utf-8").read()
 
-# ---- 1) onViewCreated: call tabletSetup after the left reader's openFile ----
 anchor_open = ("    invoke-virtual {p2, p1, v0, v1, v2}, Lorg/chabad/kehossiddur/PDFView;"
                "->openFile(Ljava/lang/String;Ljava/util/ArrayList;II)Lru/mobigroup/bookreader/MuPDFCore;\n")
 call_setup = (
@@ -15,51 +21,33 @@ call_setup = (
     "    invoke-direct {p0, p1, v0, v1, v2}, Lorg/chabad/kehossiddur/PrayerFragment;->tabletSetup(Ljava/lang/String;Ljava/util/ArrayList;II)V\n"
     "    :try_end_tab\n"
     "    .catch Ljava/lang/Throwable; {:try_start_tab .. :try_end_tab} :catch_tab\n"
-    "    goto :after_tab\n"
-    "    :catch_tab\n"
-    "    move-exception v3\n"
-    "    :after_tab\n")
-assert s.count(anchor_open) == 1, "openFile anchor not unique/found: %d" % s.count(anchor_open)
+    "    goto :after_tab\n    :catch_tab\n    move-exception v3\n    :after_tab\n")
+assert s.count(anchor_open) == 1, "openFile anchor"
 s = s.replace(anchor_open, anchor_open + call_setup, 1)
 
-# ---- 2) onCreateOptionsMenu: call tabletMenu after inflate ----
 anchor_inflate = "    invoke-virtual {p2, v0, p1}, Landroid/view/MenuInflater;->inflate(ILandroid/view/Menu;)V\n"
 call_menu = (
     "\n    :try_start_tmenu\n"
     "    invoke-direct {p0, p1}, Lorg/chabad/kehossiddur/PrayerFragment;->tabletMenu(Landroid/view/Menu;)V\n"
     "    :try_end_tmenu\n"
     "    .catch Ljava/lang/Throwable; {:try_start_tmenu .. :try_end_tmenu} :catch_tmenu\n"
-    "    goto :after_tmenu\n"
-    "    :catch_tmenu\n"
-    "    move-exception v0\n"
-    "    :after_tmenu\n")
-assert s.count(anchor_inflate) == 1, "inflate anchor not unique/found"
+    "    goto :after_tmenu\n    :catch_tmenu\n    move-exception v0\n    :after_tmenu\n")
+assert s.count(anchor_inflate) == 1, "inflate anchor"
 s = s.replace(anchor_inflate, anchor_inflate + call_menu, 1)
 
-# ---- 3) onOptionsItemSelected: handle the toggle at the top ----
 anchor_sel = (".method public onOptionsItemSelected(Landroid/view/MenuItem;)Z\n    .locals 13\n\n"
               "    const-string v0, \"item\"\n\n"
               "    invoke-static {p1, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V\n")
 guard_sel = (
-    "\n    const/4 v0, 0x0\n"
-    "    :try_start_tsel\n"
+    "\n    const/4 v0, 0x0\n    :try_start_tsel\n"
     "    invoke-direct {p0, p1}, Lorg/chabad/kehossiddur/PrayerFragment;->tabletHandleToggle(Landroid/view/MenuItem;)Z\n"
-    "    move-result v0\n"
-    "    :try_end_tsel\n"
+    "    move-result v0\n    :try_end_tsel\n"
     "    .catch Ljava/lang/Throwable; {:try_start_tsel .. :try_end_tsel} :catch_tsel\n"
-    "    goto :after_tsel\n"
-    "    :catch_tsel\n"
-    "    move-exception v1\n"
-    "    const/4 v0, 0x0\n"
-    "    :after_tsel\n"
-    "    if-eqz v0, :orig_sel\n"
-    "    const/4 v0, 0x1\n"
-    "    return v0\n"
-    "    :orig_sel\n")
-assert s.count(anchor_sel) == 1, "onOptionsItemSelected anchor not unique/found"
+    "    goto :after_tsel\n    :catch_tsel\n    move-exception v1\n    const/4 v0, 0x0\n    :after_tsel\n"
+    "    if-eqz v0, :orig_sel\n    const/4 v0, 0x1\n    return v0\n    :orig_sel\n")
+assert s.count(anchor_sel) == 1, "onOptionsItemSelected anchor"
 s = s.replace(anchor_sel, anchor_sel + guard_sel, 1)
 
-# ---- 4) Append the three new methods ----
 methods = r'''
 .method private tabletSetup(Ljava/lang/String;Ljava/util/ArrayList;II)V
     .locals 11
@@ -106,8 +94,20 @@ methods = r'''
     if-nez v10, :done
     invoke-virtual {v9}, Landroidx/fragment/app/FragmentManager;->beginTransaction()Landroidx/fragment/app/FragmentTransaction;
     move-result-object v10
+    invoke-static {v0}, Landroidx/preference/PreferenceManager;->getDefaultSharedPreferences(Landroid/content/Context;)Landroid/content/SharedPreferences;
+    move-result-object v1
+    const-string v2, "prayerOrigin"
+    const/4 v3, 0x2
+    invoke-interface {v1, v2, v3}, Landroid/content/SharedPreferences;->getInt(Ljava/lang/String;I)I
+    move-result v1
+    if-nez v1, :mktoc
+    new-instance v4, Lorg/chabad/kehossiddur/HomeScreenFragment;
+    invoke-direct {v4}, Lorg/chabad/kehossiddur/HomeScreenFragment;-><init>()V
+    goto :mkdone
+    :mktoc
     new-instance v4, Lorg/chabad/kehossiddur/TOCFragment;
     invoke-direct {v4}, Lorg/chabad/kehossiddur/TOCFragment;-><init>()V
+    :mkdone
     invoke-virtual {v10, v6, v4}, Landroidx/fragment/app/FragmentTransaction;->replace(ILandroidx/fragment/app/Fragment;)Landroidx/fragment/app/FragmentTransaction;
     move-result-object v10
     invoke-virtual {v10}, Landroidx/fragment/app/FragmentTransaction;->commitAllowingStateLoss()I
@@ -209,7 +209,35 @@ methods = r'''
     return v0
 .end method
 '''
-# insert the new methods right before the final line of the class (end of file)
 s = s.rstrip() + "\n" + methods
 io.open(pf, "w", encoding="utf-8").write(s)
 print("PrayerFragment.smali patched OK")
+
+# ============================ MainActivity.smali ============================
+m = io.open(ma, encoding="utf-8").read()
+anchor_ot = ("    const-string v0, \"overrideTitle\"\n\n"
+             "    invoke-static {p7, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V\n")
+capture = (
+    "\n    :try_start_orig\n"
+    "    iget-object v0, p0, Lorg/chabad/kehossiddur/MainActivity;->lastFragment:Ljava/lang/Integer;\n"
+    "    if-eqz v0, :orig_done\n"
+    "    invoke-virtual {v0}, Ljava/lang/Integer;->intValue()I\n"
+    "    move-result v0\n"
+    "    const/16 v1, 0x8\n"
+    "    if-eq v0, v1, :orig_done\n"
+    "    invoke-static {p0}, Landroidx/preference/PreferenceManager;->getDefaultSharedPreferences(Landroid/content/Context;)Landroid/content/SharedPreferences;\n"
+    "    move-result-object v1\n"
+    "    invoke-interface {v1}, Landroid/content/SharedPreferences;->edit()Landroid/content/SharedPreferences$Editor;\n"
+    "    move-result-object v1\n"
+    "    const-string v2, \"prayerOrigin\"\n"
+    "    invoke-interface {v1, v2, v0}, Landroid/content/SharedPreferences$Editor;->putInt(Ljava/lang/String;I)Landroid/content/SharedPreferences$Editor;\n"
+    "    move-result-object v1\n"
+    "    invoke-interface {v1}, Landroid/content/SharedPreferences$Editor;->apply()V\n"
+    "    :orig_done\n"
+    "    :try_end_orig\n"
+    "    .catch Ljava/lang/Throwable; {:try_start_orig .. :try_end_orig} :catch_orig\n"
+    "    goto :after_orig\n    :catch_orig\n    move-exception v0\n    :after_orig\n")
+assert m.count(anchor_ot) == 1, "overrideTitle anchor not unique/found: %d" % m.count(anchor_ot)
+m = m.replace(anchor_ot, anchor_ot + capture, 1)
+io.open(ma, "w", encoding="utf-8").write(m)
+print("MainActivity.smali patched OK")
