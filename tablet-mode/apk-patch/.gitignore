@@ -1,0 +1,6 @@
+# build artifacts and downloaded tools (not source)
+.work/
+.tools/
+out/
+*.apk
+*.idsig

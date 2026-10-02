@@ -1,0 +1,47 @@
+PrayerFragment.onViewCreated — smali edits (classes_classes6/.../PrayerFragment.smali)
+=======================================================================================
+
+Two edits:
+
+(1) Bump the register count of onViewCreated so we have scratch registers v5..v7:
+
+    .method public onViewCreated(Landroid/view/View;Landroid/os/Bundle;)V
+-       .locals 5
++       .locals 8
+
+(2) Insert the spread block immediately AFTER the left reader's openFile call and
+    BEFORE the ".line 158" marker. At that point the registers hold:
+        p2 = left PDFView      p1 = pdf asset path (String)
+        v0 = pages (ArrayList) v1 = start page (int)   v2 = scrollY (int)
+
+    ...
+        invoke-virtual {p2, p1, v0, v1, v2}, Lorg/chabad/kehossiddur/PDFView;->openFile(Ljava/lang/String;Ljava/util/ArrayList;II)Lru/mobigroup/bookreader/MuPDFCore;
++
++       # === TABLET TWO-COLUMN SPREAD (added) ===
++       invoke-virtual {p2}, Landroid/view/View;->getParent()Landroid/view/ViewParent;
++       move-result-object v5
++       instance-of v6, v5, Landroid/view/ViewGroup;
++       if-eqz v6, :spread_skip
++       check-cast v5, Landroid/view/ViewGroup;
++       invoke-virtual {v5}, Landroid/view/ViewGroup;->getChildCount()I
++       move-result v6
++       const/4 v7, 0x2
++       if-lt v6, v7, :spread_skip
++       const/4 v7, 0x1
++       invoke-virtual {v5, v7}, Landroid/view/ViewGroup;->getChildAt(I)Landroid/view/View;
++       move-result-object v5
++       instance-of v6, v5, Lorg/chabad/kehossiddur/PDFView;
++       if-eqz v6, :spread_skip
++       check-cast v5, Lorg/chabad/kehossiddur/PDFView;
++       add-int/lit8 v6, v1, 0x1
++       invoke-virtual {v5, p1, v0, v6, v2}, Lorg/chabad/kehossiddur/PDFView;->openFile(Ljava/lang/String;Ljava/util/ArrayList;II)Lru/mobigroup/bookreader/MuPDFCore;
++       invoke-virtual {v5}, Lorg/chabad/kehossiddur/PDFView;->checkHasSizes()V
++       :spread_skip
++       # === END TABLET TWO-COLUMN SPREAD ===
+
+        .line 158
+    ...
+
+Why it's safe on phones: layout/prayer_fragment.xml makes the reader's sibling the alert
+include (a LinearLayout), so getChildAt(1) is not a PDFView and the instance-of check skips.
+On tablets, layout-sw600dp/prayer_fragment.xml makes child 1 the second PDFView.
