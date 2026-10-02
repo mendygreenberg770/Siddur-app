@@ -1,0 +1,215 @@
+#!/usr/bin/env python3
+# Patches PrayerFragment.smali to add: SPREAD vs OUTLINE tablet modes + a toolbar
+# toggle. All logic lives in 3 new private methods; the 3 call sites are wrapped in
+# try/catch(Throwable) so any failure falls back to normal behavior (never crashes).
+import io, sys
+
+pf = sys.argv[1]
+s = io.open(pf, encoding="utf-8").read()
+
+# ---- 1) onViewCreated: call tabletSetup after the left reader's openFile ----
+anchor_open = ("    invoke-virtual {p2, p1, v0, v1, v2}, Lorg/chabad/kehossiddur/PDFView;"
+               "->openFile(Ljava/lang/String;Ljava/util/ArrayList;II)Lru/mobigroup/bookreader/MuPDFCore;\n")
+call_setup = (
+    "\n    :try_start_tab\n"
+    "    invoke-direct {p0, p1, v0, v1, v2}, Lorg/chabad/kehossiddur/PrayerFragment;->tabletSetup(Ljava/lang/String;Ljava/util/ArrayList;II)V\n"
+    "    :try_end_tab\n"
+    "    .catch Ljava/lang/Throwable; {:try_start_tab .. :try_end_tab} :catch_tab\n"
+    "    goto :after_tab\n"
+    "    :catch_tab\n"
+    "    move-exception v3\n"
+    "    :after_tab\n")
+assert s.count(anchor_open) == 1, "openFile anchor not unique/found: %d" % s.count(anchor_open)
+s = s.replace(anchor_open, anchor_open + call_setup, 1)
+
+# ---- 2) onCreateOptionsMenu: call tabletMenu after inflate ----
+anchor_inflate = "    invoke-virtual {p2, v0, p1}, Landroid/view/MenuInflater;->inflate(ILandroid/view/Menu;)V\n"
+call_menu = (
+    "\n    :try_start_tmenu\n"
+    "    invoke-direct {p0, p1}, Lorg/chabad/kehossiddur/PrayerFragment;->tabletMenu(Landroid/view/Menu;)V\n"
+    "    :try_end_tmenu\n"
+    "    .catch Ljava/lang/Throwable; {:try_start_tmenu .. :try_end_tmenu} :catch_tmenu\n"
+    "    goto :after_tmenu\n"
+    "    :catch_tmenu\n"
+    "    move-exception v0\n"
+    "    :after_tmenu\n")
+assert s.count(anchor_inflate) == 1, "inflate anchor not unique/found"
+s = s.replace(anchor_inflate, anchor_inflate + call_menu, 1)
+
+# ---- 3) onOptionsItemSelected: handle the toggle at the top ----
+anchor_sel = (".method public onOptionsItemSelected(Landroid/view/MenuItem;)Z\n    .locals 13\n\n"
+              "    const-string v0, \"item\"\n\n"
+              "    invoke-static {p1, v0}, Lkotlin/jvm/internal/Intrinsics;->checkNotNullParameter(Ljava/lang/Object;Ljava/lang/String;)V\n")
+guard_sel = (
+    "\n    const/4 v0, 0x0\n"
+    "    :try_start_tsel\n"
+    "    invoke-direct {p0, p1}, Lorg/chabad/kehossiddur/PrayerFragment;->tabletHandleToggle(Landroid/view/MenuItem;)Z\n"
+    "    move-result v0\n"
+    "    :try_end_tsel\n"
+    "    .catch Ljava/lang/Throwable; {:try_start_tsel .. :try_end_tsel} :catch_tsel\n"
+    "    goto :after_tsel\n"
+    "    :catch_tsel\n"
+    "    move-exception v1\n"
+    "    const/4 v0, 0x0\n"
+    "    :after_tsel\n"
+    "    if-eqz v0, :orig_sel\n"
+    "    const/4 v0, 0x1\n"
+    "    return v0\n"
+    "    :orig_sel\n")
+assert s.count(anchor_sel) == 1, "onOptionsItemSelected anchor not unique/found"
+s = s.replace(anchor_sel, anchor_sel + guard_sel, 1)
+
+# ---- 4) Append the three new methods ----
+methods = r'''
+.method private tabletSetup(Ljava/lang/String;Ljava/util/ArrayList;II)V
+    .locals 11
+    invoke-virtual {p0}, Landroidx/fragment/app/Fragment;->requireContext()Landroid/content/Context;
+    move-result-object v0
+    invoke-virtual {p0}, Landroidx/fragment/app/Fragment;->requireView()Landroid/view/View;
+    move-result-object v1
+    invoke-virtual {v0}, Landroid/content/Context;->getResources()Landroid/content/res/Resources;
+    move-result-object v2
+    invoke-virtual {v0}, Landroid/content/Context;->getPackageName()Ljava/lang/String;
+    move-result-object v3
+    const-string v4, "id"
+    const-string v5, "pdfview_right"
+    invoke-virtual {v2, v5, v4, v3}, Landroid/content/res/Resources;->getIdentifier(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I
+    move-result v5
+    invoke-virtual {v1, v5}, Landroid/view/View;->findViewById(I)Landroid/view/View;
+    move-result-object v5
+    const-string v6, "toc_side_panel"
+    invoke-virtual {v2, v6, v4, v3}, Landroid/content/res/Resources;->getIdentifier(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I
+    move-result v6
+    invoke-virtual {v1, v6}, Landroid/view/View;->findViewById(I)Landroid/view/View;
+    move-result-object v7
+    invoke-static {v0}, Landroidx/preference/PreferenceManager;->getDefaultSharedPreferences(Landroid/content/Context;)Landroid/content/SharedPreferences;
+    move-result-object v8
+    const-string v9, "tabletLayout"
+    const-string v10, "spread"
+    invoke-interface {v8, v9, v10}, Landroid/content/SharedPreferences;->getString(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+    move-result-object v8
+    const-string v9, "outline"
+    invoke-virtual {v8, v9}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
+    move-result v8
+    if-eqz v8, :spread
+    if-eqz v7, :done
+    const/4 v9, 0x0
+    invoke-virtual {v7, v9}, Landroid/view/View;->setVisibility(I)V
+    if-eqz v5, :hidedone
+    const/16 v9, 0x8
+    invoke-virtual {v5, v9}, Landroid/view/View;->setVisibility(I)V
+    :hidedone
+    invoke-virtual {p0}, Landroidx/fragment/app/Fragment;->getChildFragmentManager()Landroidx/fragment/app/FragmentManager;
+    move-result-object v9
+    invoke-virtual {v9, v6}, Landroidx/fragment/app/FragmentManager;->findFragmentById(I)Landroidx/fragment/app/Fragment;
+    move-result-object v10
+    if-nez v10, :done
+    invoke-virtual {v9}, Landroidx/fragment/app/FragmentManager;->beginTransaction()Landroidx/fragment/app/FragmentTransaction;
+    move-result-object v10
+    new-instance v4, Lorg/chabad/kehossiddur/TOCFragment;
+    invoke-direct {v4}, Lorg/chabad/kehossiddur/TOCFragment;-><init>()V
+    invoke-virtual {v10, v6, v4}, Landroidx/fragment/app/FragmentTransaction;->replace(ILandroidx/fragment/app/Fragment;)Landroidx/fragment/app/FragmentTransaction;
+    move-result-object v10
+    invoke-virtual {v10}, Landroidx/fragment/app/FragmentTransaction;->commitAllowingStateLoss()I
+    goto :done
+    :spread
+    if-eqz v5, :done
+    instance-of v9, v5, Lorg/chabad/kehossiddur/PDFView;
+    if-eqz v9, :done
+    if-eqz v7, :spreadshow
+    const/16 v9, 0x8
+    invoke-virtual {v7, v9}, Landroid/view/View;->setVisibility(I)V
+    :spreadshow
+    const/4 v9, 0x0
+    invoke-virtual {v5, v9}, Landroid/view/View;->setVisibility(I)V
+    check-cast v5, Lorg/chabad/kehossiddur/PDFView;
+    add-int/lit8 v9, p3, 0x1
+    invoke-virtual {v5, p1, p2, v9, p4}, Lorg/chabad/kehossiddur/PDFView;->openFile(Ljava/lang/String;Ljava/util/ArrayList;II)Lru/mobigroup/bookreader/MuPDFCore;
+    invoke-virtual {v5}, Lorg/chabad/kehossiddur/PDFView;->checkHasSizes()V
+    :done
+    return-void
+.end method
+
+.method private tabletMenu(Landroid/view/Menu;)V
+    .locals 6
+    invoke-virtual {p0}, Landroidx/fragment/app/Fragment;->requireContext()Landroid/content/Context;
+    move-result-object v0
+    invoke-virtual {v0}, Landroid/content/Context;->getResources()Landroid/content/res/Resources;
+    move-result-object v1
+    invoke-virtual {v1}, Landroid/content/res/Resources;->getConfiguration()Landroid/content/res/Configuration;
+    move-result-object v1
+    iget v1, v1, Landroid/content/res/Configuration;->smallestScreenWidthDp:I
+    const/16 v2, 0x258
+    if-lt v1, v2, :mdone
+    invoke-virtual {v0}, Landroid/content/Context;->getResources()Landroid/content/res/Resources;
+    move-result-object v1
+    invoke-virtual {v0}, Landroid/content/Context;->getPackageName()Ljava/lang/String;
+    move-result-object v2
+    const-string v3, "tablet_view_toggle"
+    const-string v4, "id"
+    invoke-virtual {v1, v3, v4, v2}, Landroid/content/res/Resources;->getIdentifier(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I
+    move-result v1
+    invoke-interface {p1, v1}, Landroid/view/Menu;->findItem(I)Landroid/view/MenuItem;
+    move-result-object v1
+    if-eqz v1, :mdone
+    const/4 v2, 0x1
+    invoke-interface {v1, v2}, Landroid/view/MenuItem;->setVisible(Z)Landroid/view/MenuItem;
+    :mdone
+    return-void
+.end method
+
+.method private tabletHandleToggle(Landroid/view/MenuItem;)Z
+    .locals 8
+    invoke-virtual {p0}, Landroidx/fragment/app/Fragment;->requireContext()Landroid/content/Context;
+    move-result-object v0
+    invoke-virtual {v0}, Landroid/content/Context;->getResources()Landroid/content/res/Resources;
+    move-result-object v1
+    invoke-virtual {v0}, Landroid/content/Context;->getPackageName()Ljava/lang/String;
+    move-result-object v2
+    const-string v3, "tablet_view_toggle"
+    const-string v4, "id"
+    invoke-virtual {v1, v3, v4, v2}, Landroid/content/res/Resources;->getIdentifier(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I
+    move-result v1
+    invoke-interface {p1}, Landroid/view/MenuItem;->getItemId()I
+    move-result v2
+    if-eq v1, v2, :istoggle
+    const/4 v0, 0x0
+    return v0
+    :istoggle
+    invoke-static {v0}, Landroidx/preference/PreferenceManager;->getDefaultSharedPreferences(Landroid/content/Context;)Landroid/content/SharedPreferences;
+    move-result-object v1
+    const-string v2, "tabletLayout"
+    const-string v3, "spread"
+    invoke-interface {v1, v2, v3}, Landroid/content/SharedPreferences;->getString(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+    move-result-object v3
+    const-string v4, "outline"
+    invoke-virtual {v3, v4}, Ljava/lang/String;->equals(Ljava/lang/Object;)Z
+    move-result v3
+    if-eqz v3, :setoutline
+    const-string v4, "spread"
+    goto :doset
+    :setoutline
+    const-string v4, "outline"
+    :doset
+    invoke-interface {v1}, Landroid/content/SharedPreferences;->edit()Landroid/content/SharedPreferences$Editor;
+    move-result-object v5
+    invoke-interface {v5, v2, v4}, Landroid/content/SharedPreferences$Editor;->putString(Ljava/lang/String;Ljava/lang/String;)Landroid/content/SharedPreferences$Editor;
+    move-result-object v5
+    invoke-interface {v5}, Landroid/content/SharedPreferences$Editor;->apply()V
+    invoke-virtual {p0}, Landroidx/fragment/app/Fragment;->requireActivity()Landroidx/fragment/app/FragmentActivity;
+    move-result-object v5
+    check-cast v5, Lorg/chabad/kehossiddur/MainActivity;
+    const/16 v6, 0x8
+    invoke-static {v6}, Ljava/lang/Integer;->valueOf(I)Ljava/lang/Integer;
+    move-result-object v6
+    invoke-virtual {p0}, Landroidx/fragment/app/Fragment;->requireArguments()Landroid/os/Bundle;
+    move-result-object v7
+    invoke-virtual {v5, v6, v7}, Lorg/chabad/kehossiddur/MainActivity;->setFragment(Ljava/lang/Integer;Landroid/os/Bundle;)V
+    const/4 v0, 0x1
+    return v0
+.end method
+'''
+# insert the new methods right before the final line of the class (end of file)
+s = s.rstrip() + "\n" + methods
+io.open(pf, "w", encoding="utf-8").write(s)
+print("PrayerFragment.smali patched OK")
