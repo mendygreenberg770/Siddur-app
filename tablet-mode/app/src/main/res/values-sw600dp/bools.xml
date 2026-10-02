@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Any device whose smallest width is >= 600dp (7"+ tablets, and large foldables
+  when unfolded) resolves isTablet = true. This is the single switch that turns
+  on the two-column spread + side-outline tablet experience.
+
+  sw600dp is resolved by the smallest width in ANY orientation, so a device that
+  qualifies stays "a tablet" in both portrait and landscape. If you only want the
+  tablet layouts in landscape, move this file to values-sw600dp-land/ instead.
+-->
+<resources>
+    <bool name="isTablet">true</bool>
+</resources>

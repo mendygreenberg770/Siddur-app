@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Merge these into your existing res/values/strings.xml (and localized copies). -->
+<resources>
+    <string name="tablet_view_toggle">Toggle tablet layout</string>
+    <string name="tablet_view_spread">Two-page spread</string>
+    <string name="tablet_view_outline">Outline on the side</string>
+</resources>

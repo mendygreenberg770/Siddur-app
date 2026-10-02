@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TABLET prayer layout (res/layout-sw600dp/prayer_fragment.xml).
+
+  IMPORTANT: start from a COPY of your real res/layout/prayer_fragment.xml so the
+  alert-bar styling, colours and dimens match the phone layout exactly, then fold
+  in the three tablet additions marked <!- - TABLET - -> below. The ids that
+  PrayerFragment.onViewCreated() looks up MUST stay identical:
+      pdfview, alert_bar, alert_buttons, alert_message, show_alert, alert_got_it
+  This file adds two more ids the tablet code uses: toc_side_panel, pdfview_right.
+
+  Layout is: [ optional TOC side panel ] | [ reader area = left page | right page ]
+    - SPREAD  mode -> toc_side_panel GONE,  pdfview_right VISIBLE  (two pages)
+    - OUTLINE mode -> toc_side_panel VISIBLE, pdfview_right GONE   (toc + one page)
+  PrayerFragment toggles those visibilities at runtime from TabletMode.getViewMode().
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="horizontal">
+
+    <!-- TABLET: side outline panel. PrayerFragment drops a TOCFragment in here
+         (via childFragmentManager) when the view mode is OUTLINE. -->
+    <FrameLayout
+        android:id="@+id/toc_side_panel"
+        android:layout_width="320dp"
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        android:background="?android:attr/colorBackground" />
+
+    <View
+        android:id="@+id/toc_divider"
+        android:layout_width="1dp"
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        android:background="?android:attr/listDivider" />
+
+    <!-- Reader area -->
+    <RelativeLayout
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1">
+
+        <!-- The two reading columns. In SPREAD mode both are visible (weight 1
+             each); in OUTLINE mode pdfview_right is GONE and pdfview fills the area. -->
+        <LinearLayout
+            android:id="@+id/reader_columns"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="horizontal">
+
+            <org.chabad.kehossiddur.PDFView
+                android:id="@+id/pdfview"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1" />
+
+            <!-- TABLET: second reading column for the open-book spread. -->
+            <org.chabad.kehossiddur.PDFView
+                android:id="@+id/pdfview_right"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- Alert bar: keep identical ids/styling to your phone prayer_fragment.xml.
+             The version below is a functional placeholder; replace it with the real
+             one from your layout/prayer_fragment.xml. -->
+        <LinearLayout
+            android:id="@+id/alert_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/alert_message"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="12dp" />
+
+            <TextView
+                android:id="@+id/alert_got_it"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="end"
+                android:padding="12dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/alert_buttons"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
+            android:orientation="horizontal"
+            android:visibility="gone">
+
+            <Button
+                android:id="@+id/show_alert"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+    </RelativeLayout>
+</LinearLayout>

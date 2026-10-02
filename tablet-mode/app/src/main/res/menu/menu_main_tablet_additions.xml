@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SNIPPET - not a standalone file. Add this <item> to your existing
+  res/menu/menu_main.xml (the one PrayerFragment inflates in onCreateOptionsMenu).
+
+  It starts hidden; PrayerFragment.onCreateOptionsMenu() makes it visible only on
+  tablets and sets the icon to reflect the current mode. Place it before the
+  existing "search" item so it sits to the left of search in the toolbar.
+-->
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/tablet_view_toggle"
+        android:icon="@drawable/ic_view_spread"
+        android:title="@string/tablet_view_toggle"
+        android:visible="false"
+        app:showAsAction="ifRoom" />
+
+    <!-- ... your existing items (search, lang, ...) stay as they are ... -->
+</menu>

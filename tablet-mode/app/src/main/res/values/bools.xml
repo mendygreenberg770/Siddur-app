@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Phones (and anything narrower than 600dp) report isTablet = false, so the
+  tablet code paths and the toolbar toggle stay completely hidden. Phones keep
+  today's single-column, scroll-down reader unchanged.
+-->
+<resources>
+    <bool name="isTablet">false</bool>
+</resources>
